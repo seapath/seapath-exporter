@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  insatomcat-exporter:
+    image: docker.io/insatomcat/insatomcat-exporter:latest
+    container_name: insatomcat-exporter
+    restart: unless-stopped
+    ports:
+      - "9184:9184"
+    volumes:
+      # libvirt socket for VM communication
+      - /var/run/libvirt/libvirt-sock-ro:/var/run/libvirt/libvirt-sock-ro:ro
+      # QEMU PID files
+      - /var/run/libvirt/qemu:/var/run/libvirt/qemu:ro
+    pid: host
+    network_mode: host  # Optional: use host networking for easier access

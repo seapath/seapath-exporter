@@ -1,0 +1,19 @@
+[Unit]
+Description=Prometheus insatomcat Exporter (vhost CPU monitoring)
+After=network-online.target libvirtd.service
+Wants=network-online.target
+
+[Container]
+Image=docker.io/insatomcat/insatomcat-exporter:latest
+PublishPort=9184:9184
+Volume=/var/run/libvirt/libvirt-sock-ro:/var/run/libvirt/libvirt-sock-ro:ro
+Volume=/var/run/libvirt/qemu:/var/run/libvirt/qemu:ro
+PodmanArgs=--pid=host
+SecurityLabelDisable=true
+
+[Service]
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
