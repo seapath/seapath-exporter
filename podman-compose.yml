@@ -8,9 +8,15 @@ services:
     ports:
       - "9184:9184"
     volumes:
-      # libvirt socket for VM communication
-      - /var/run/libvirt/libvirt-sock-ro:/var/run/libvirt/libvirt-sock-ro:ro
+      # libvirt socket, read-write because the exporter uses qemu:///system
+      - /var/run/libvirt/libvirt-sock:/var/run/libvirt/libvirt-sock:ro
       # QEMU PID files
       - /var/run/libvirt/qemu:/var/run/libvirt/qemu:ro
+      # TLS material, only needed when the TLS_* variables below are set
+      #- /etc/prometheus/exporters/tls:/etc/prometheus/exporters/tls:ro
+    #environment:
+    #  TLS_CERT_FILE: /etc/prometheus/exporters/tls/server.crt
+    #  TLS_KEY_FILE: /etc/prometheus/exporters/tls/server.key
+    #  TLS_CLIENT_CA_FILE: /etc/prometheus/exporters/tls/ca.crt
     pid: host
     network_mode: host  # Optional: use host networking for easier access

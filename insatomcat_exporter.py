@@ -1,108 +1,198 @@
-from prometheus_client import start_http_server, Gauge, REGISTRY, generate_latest
-from http.server import BaseHTTPRequestHandler, HTTPServer
-import libvirt
-import psutil
+#!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""Prometheus exporter for the metrics missing from the standard exporters."""
+
+import logging
+import os
+import ssl
 import xml.etree.ElementTree as ET
 
-vhost_cpu_time_gauge = Gauge(
-    'virsh_vhost_cpu_time_seconds',
-    'CPU time (user+system) of vhost threads on the host related to this domain, in seconds',
-    ['domain', 'thread']
-)
+import libvirt
+import psutil
+from prometheus_client import REGISTRY, start_http_server
+from prometheus_client.core import GaugeMetricFamily
 
-KB_TO_BYTES = 1024
+LOG = logging.getLogger("insatomcat_exporter")
 
-def get_qemu_pid(domain):
-    # domain.getMetadata or domain.XMLDesc
-    xml = domain.XMLDesc()
-    tree = ET.fromstring(xml)
-    # The PID is under <domain><process id='PID'/>
-    pid = None
-    proc = tree.find("./process")
-    if proc is not None and 'pid' in proc.attrib:
-        pid = int(proc.attrib['pid'])
-    else:
-        # fallback: read from /var/run/libvirt/qemu/<name>.pid
-        import os
-        pidfile = f"/var/run/libvirt/qemu/{domain.name()}.pid"
-        if os.path.exists(pidfile):
-            with open(pidfile) as f:
-                pid = int(f.read().strip())
-    return pid
+DEFAULT_LIBVIRT_URI = "qemu:///system"
+DEFAULT_QEMU_PID_DIR = "/var/run/libvirt/qemu"
+DEFAULT_LISTEN_ADDRESS = "0.0.0.0"
+DEFAULT_LISTEN_PORT = "9184"
 
-def collect_qemu_stats(domain):
-    try:
-        pid = get_qemu_pid(domain)
-        if not pid:
-            return
-        proc = psutil.Process(pid)
+TLS_VERSIONS = {
+    "1.2": ssl.TLSVersion.TLSv1_2,
+    "1.3": ssl.TLSVersion.TLSv1_3,
+}
+
+
+def env(name, default=None):
+    """Return an environment variable, treating an empty value as unset."""
+    return os.environ.get(name, "").strip() or default
+
+
+class VhostCPUCollector:
+    """Expose the CPU time of the vhost threads backing each libvirt domain.
+
+    libvirt does not account for those kernel threads in the domain CPU
+    statistics, so they are read from the host process table instead.
+
+    Metrics are rebuilt on every scrape, so the series of a domain that is no
+    longer running simply stops being exposed.
+    """
+
+    def __init__(self, uri, qemu_pid_dir):
+        self._uri = uri
+        self._qemu_pid_dir = qemu_pid_dir
+
+    def collect(self):
+        vhost_cpu = GaugeMetricFamily(
+            "virsh_vhost_cpu_time_seconds",
+            "CPU time (user+system) of vhost threads on the host related to "
+            "this domain, in seconds",
+            labels=["domain", "thread"],
+        )
+        libvirt_up = GaugeMetricFamily(
+            "virsh_exporter_libvirt_up",
+            "Whether the last scrape managed to query libvirt",
+        )
+
         try:
-            for thr in proc.threads():  # thr.id, thr.user_time, thr.system_time
-                tid = thr.id
-                thr_cpu_s = float(thr.user_time + thr.system_time)
-                comm = ''
-                try:
-                    with open(f"/proc/{pid}/task/{tid}/comm", 'rt') as cf:
-                        comm = cf.read().strip()
-                except Exception:
-                    # best-effort; continue without name if we can't read it
-                    comm = ''
-                if 'vhost' in comm:
-                    vhost_cpu_time_gauge.labels(domain=domain.name(), thread=comm+'-'+str(tid) or str(tid)).set(thr_cpu_s)
-        except Exception:
-            # best-effort, ignore thread-inspect failures
-            pass
-
-    except Exception as e:
-        print(f"Error collecting qemu stats for {domain.name()}: {e}")
-
-def remove_stale_gauge_series(current_domains):
-    """Remove label sets that no longer exist."""
-    try:
-        all_gauges = [v for v in globals().values() if isinstance(v, Gauge)]
-        for gauge in all_gauges:
-            if not gauge._labelnames:  # skip unlabeled gauges
-                continue
-            for label_values in list(gauge._metrics.keys()):
-                labels_dict = dict(zip(gauge._labelnames, label_values))
-                if 'domain' in labels_dict and labels_dict['domain'] not in current_domains:
-                    # must pass positional args in labelname order
-                    values_in_order = tuple(labels_dict[name] for name in gauge._labelnames)
-                    gauge.remove(*values_in_order)
-    except Exception as e:
-        print(f"Error removing stale gauges: {e}")
-
-def collect_all_stats():
-    """Collect stats for all running domains on-demand."""
-    try:
-        conn = libvirt.open('qemu:///system')
-        if conn is None:
-            print("Failed to open connection to hypervisor")
+            domains = self._domain_pids()
+        except libvirt.libvirtError as error:
+            # Without this the scrape would silently succeed with no series at
+            # all, which is indistinguishable from a host running no VM.
+            LOG.warning("cannot query libvirt on %s: %s", self._uri, error)
+            libvirt_up.add_metric([], 0)
+            yield libvirt_up
+            yield vhost_cpu
             return
-        domain_ids = conn.listDomainsID()  # running domains only
-        current_domains = []
-        for dom_id in domain_ids:
-            domain = conn.lookupByID(dom_id)
-            current_domains.append(domain.name())
-            collect_qemu_stats(domain)
-        remove_stale_gauge_series(current_domains)
-        conn.close()
-    except Exception as e:
-        print(f"Error listing domains: {e}")
 
-# --- HTTP handler ---
-class MetricsHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        if self.path == '/metrics':
-            collect_all_stats()
-            self.send_response(200)
-            self.send_header("Content-type", "text/plain; version=0.0.4")
-            self.end_headers()
-            self.wfile.write(generate_latest(REGISTRY))
+        libvirt_up.add_metric([], 1)
+        for name, pid in domains:
+            for thread, cpu_seconds in self._vhost_threads(pid):
+                vhost_cpu.add_metric([name, thread], cpu_seconds)
 
-# --- Main server ---
-if __name__ == '__main__':
-    server_address = ('', 9184)
-    httpd = HTTPServer(server_address, MetricsHandler)
-    print("virsh exporter running on :9184/metrics")
-    httpd.serve_forever()
+        yield libvirt_up
+        yield vhost_cpu
+
+    def _domain_pids(self):
+        """Return the (domain name, QEMU pid) pairs of the running domains."""
+        conn = libvirt.open(self._uri)
+        try:
+            domains = []
+            for domain_id in conn.listDomainsID():
+                try:
+                    domain = conn.lookupByID(domain_id)
+                    name = domain.name()
+                except libvirt.libvirtError as error:
+                    LOG.debug("domain %s vanished mid-scrape: %s", domain_id, error)
+                    continue
+                pid = self._qemu_pid(domain, name)
+                if pid is None:
+                    LOG.debug("no QEMU pid found for domain %s", name)
+                    continue
+                domains.append((name, pid))
+            return domains
+        finally:
+            conn.close()
+
+    def _qemu_pid(self, domain, name):
+        try:
+            process = ET.fromstring(domain.XMLDesc()).find("./process")
+        except (libvirt.libvirtError, ET.ParseError) as error:
+            LOG.debug("cannot read the XML of domain %s: %s", name, error)
+            process = None
+        if process is not None and "pid" in process.attrib:
+            return int(process.attrib["pid"])
+
+        pidfile = os.path.join(self._qemu_pid_dir, f"{name}.pid")
+        try:
+            with open(pidfile, "rt") as handle:
+                return int(handle.read().strip())
+        except (OSError, ValueError) as error:
+            LOG.debug("cannot read %s: %s", pidfile, error)
+            return None
+
+    def _vhost_threads(self, pid):
+        try:
+            threads = psutil.Process(pid).threads()
+        except psutil.Error as error:
+            LOG.debug("cannot inspect pid %s: %s", pid, error)
+            return
+        for thread in threads:
+            comm = self._thread_comm(pid, thread.id)
+            if "vhost" not in comm:
+                continue
+            yield f"{comm}-{thread.id}", float(thread.user_time + thread.system_time)
+
+    @staticmethod
+    def _thread_comm(pid, tid):
+        try:
+            with open(f"/proc/{pid}/task/{tid}/comm", "rt") as handle:
+                return handle.read().strip()
+        except OSError:
+            # Best effort: the thread may have exited since we listed it.
+            return ""
+
+
+def tls_options():
+    """Build the TLS keyword arguments of start_http_server from the environment."""
+    certfile = env("TLS_CERT_FILE")
+    keyfile = env("TLS_KEY_FILE")
+    if not certfile and not keyfile:
+        return {}
+    if not certfile or not keyfile:
+        raise SystemExit("TLS_CERT_FILE and TLS_KEY_FILE must be set together")
+
+    minimum = env("TLS_MIN_VERSION", "1.3")
+    if minimum not in TLS_VERSIONS:
+        raise SystemExit(
+            "TLS_MIN_VERSION must be one of " + ", ".join(sorted(TLS_VERSIONS))
+        )
+
+    options = {
+        "certfile": certfile,
+        "keyfile": keyfile,
+        "tls_min_version": TLS_VERSIONS[minimum],
+    }
+
+    client_ca = env("TLS_CLIENT_CA_FILE")
+    if client_ca:
+        options["client_cafile"] = client_ca
+        options["client_auth_required"] = True
+    return options
+
+
+def main():
+    logging.basicConfig(
+        level=env("LOG_LEVEL", "INFO").upper(),
+        format="%(asctime)s %(levelname)s %(message)s",
+    )
+    # libvirt writes its own copy of every error on stderr, on top of the
+    # exceptions it raises and that we already log ourselves.
+    libvirt.registerErrorHandler(lambda ctx, error: None, None)
+
+    address = env("LISTEN_ADDRESS", DEFAULT_LISTEN_ADDRESS)
+    port = int(env("LISTEN_PORT", DEFAULT_LISTEN_PORT))
+    options = tls_options()
+
+    REGISTRY.register(
+        VhostCPUCollector(
+            env("LIBVIRT_URI", DEFAULT_LIBVIRT_URI),
+            env("QEMU_PID_DIR", DEFAULT_QEMU_PID_DIR),
+        )
+    )
+
+    _, thread = start_http_server(port, address, **options)
+    LOG.info(
+        "serving metrics on %s://%s:%s/metrics%s",
+        "https" if options else "http",
+        address,
+        port,
+        " (client certificate required)" if options.get("client_auth_required") else "",
+    )
+    thread.join()
+
+
+if __name__ == "__main__":
+    main()

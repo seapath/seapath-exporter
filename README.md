@@ -28,6 +28,16 @@ virsh_vhost_cpu_time_seconds{domain="vm-name", thread="vhost-12345"} 123.45
 - **Type:** Gauge
 - **Unit:** Seconds (cumulative CPU time)
 
+### Scrape Health
+
+```
+virsh_exporter_libvirt_up 1
+```
+
+Set to `0` when the exporter could not reach libvirt during the last scrape.
+Without it, a broken libvirt connection would look exactly like a host running
+no VM, since both produce no `virsh_vhost_cpu_time_seconds` series.
+
 ## 🚀 Planned Metrics
 
 - Additional libvirt metrics not covered by prometheus-libvirt-exporter
@@ -53,7 +63,7 @@ podman run -d \
   --name insatomcat-exporter \
   --restart unless-stopped \
   -p 9184:9184 \
-  -v /var/run/libvirt/libvirt-sock-ro:/var/run/libvirt/libvirt-sock-ro:ro \
+  -v /var/run/libvirt/libvirt-sock:/var/run/libvirt/libvirt-sock:ro \
   -v /var/run/libvirt/qemu:/var/run/libvirt/qemu:ro \
   --pid=host \
   docker.io/insatomcat/insatomcat-exporter:latest
@@ -66,7 +76,7 @@ docker run -d \
   --name insatomcat-exporter \
   --restart unless-stopped \
   -p 9184:9184 \
-  -v /var/run/libvirt/libvirt-sock-ro:/var/run/libvirt/libvirt-sock-ro:ro \
+  -v /var/run/libvirt/libvirt-sock:/var/run/libvirt/libvirt-sock:ro \
   -v /var/run/libvirt/qemu:/var/run/libvirt/qemu:ro \
   --pid=host \
   insatomcat/insatomcat-exporter:latest
@@ -85,7 +95,7 @@ Wants=network-online.target
 [Container]
 Image=docker.io/insatomcat/insatomcat-exporter:latest
 PublishPort=9184:9184
-Volume=/var/run/libvirt/libvirt-sock-ro:/var/run/libvirt/libvirt-sock-ro:ro
+Volume=/var/run/libvirt/libvirt-sock:/var/run/libvirt/libvirt-sock:ro
 Volume=/var/run/libvirt/qemu:/var/run/libvirt/qemu:ro
 PodmanArgs=--pid=host
 SecurityLabelDisable=true
@@ -139,7 +149,59 @@ scrape_configs:
 
 ### Environment Variables
 
-Currently no environment variables are needed. Configuration will be added as new metrics are implemented.
+Everything is optional, the defaults reproduce the historical behaviour.
+
+| Variable | Default | Description |
+|---|---|---|
+| `LISTEN_ADDRESS` | `0.0.0.0` | Address the metrics endpoint binds to |
+| `LISTEN_PORT` | `9184` | Port the metrics endpoint binds to |
+| `LIBVIRT_URI` | `qemu:///system` | libvirt connection URI |
+| `QEMU_PID_DIR` | `/var/run/libvirt/qemu` | Where the per-domain QEMU pid files are read |
+| `LOG_LEVEL` | `INFO` | `DEBUG` also logs the domains and threads that could not be inspected |
+| `TLS_CERT_FILE` | unset | Server certificate, enables TLS when set |
+| `TLS_KEY_FILE` | unset | Server private key, mandatory together with `TLS_CERT_FILE` |
+| `TLS_CLIENT_CA_FILE` | unset | CA used to verify client certificates, enables mutual TLS |
+| `TLS_MIN_VERSION` | `1.3` | Minimum accepted TLS version, `1.2` or `1.3` |
+
+### TLS and Authentication
+
+Setting `TLS_CERT_FILE` and `TLS_KEY_FILE` switches the endpoint to HTTPS.
+Adding `TLS_CLIENT_CA_FILE` additionally requires every scraper to present a
+client certificate signed by that CA, which authenticates Prometheus without
+any shared secret to distribute:
+
+```bash
+podman run -d \
+  --name insatomcat-exporter \
+  -p 9184:9184 \
+  -v /var/run/libvirt/libvirt-sock:/var/run/libvirt/libvirt-sock:ro \
+  -v /var/run/libvirt/qemu:/var/run/libvirt/qemu:ro \
+  -v /etc/prometheus/exporters/tls:/etc/prometheus/exporters/tls:ro \
+  -e TLS_CERT_FILE=/etc/prometheus/exporters/tls/server.crt \
+  -e TLS_KEY_FILE=/etc/prometheus/exporters/tls/server.key \
+  -e TLS_CLIENT_CA_FILE=/etc/prometheus/exporters/tls/ca.crt \
+  --pid=host \
+  docker.io/insatomcat/insatomcat-exporter:latest
+```
+
+The matching scrape configuration:
+
+```yaml
+scrape_configs:
+  - job_name: 'insatomcat-exporter'
+    scheme: https
+    tls_config:
+      ca_file: /etc/prometheus/tls/ca.crt
+      cert_file: /etc/prometheus/tls/prometheus.crt
+      key_file: /etc/prometheus/tls/prometheus.key
+    static_configs:
+      - targets: ['hypervisor1:9184']
+```
+
+This mirrors what the Prometheus `exporter-toolkit` offers on the Go exporters
+through `--web.config.file`, so a fleet can be secured the same way end to end.
+Note that basic authentication is deliberately not implemented: `prometheus_client`
+provides no server side support for it, whereas client certificates are native.
 
 ## ✅ Verification
 
@@ -156,6 +218,16 @@ Expected output (when VMs are running):
 # TYPE virsh_vhost_cpu_time_seconds gauge
 virsh_vhost_cpu_time_seconds{domain="vm1",thread="vhost-12345"} 123.45
 virsh_vhost_cpu_time_seconds{domain="vm2",thread="vhost-67890"} 67.89
+# HELP virsh_exporter_libvirt_up Whether the last scrape managed to query libvirt
+# TYPE virsh_exporter_libvirt_up gauge
+virsh_exporter_libvirt_up 1.0
+```
+
+With mutual TLS enabled, the same check needs the client material:
+
+```bash
+curl --cacert ca.crt --cert prometheus.crt --key prometheus.key \
+  https://localhost:9184/metrics
 ```
 
 ## 🏗️ Building from Source
@@ -195,9 +267,12 @@ python insatomcat_exporter.py
 ### Current Requirements (vhost metrics)
 
 - Host with libvirt/QEMU installed
-- Access to libvirt socket (`/var/run/libvirt/libvirt-sock-ro`)
+- Access to the libvirt socket (`/var/run/libvirt/libvirt-sock`, read-write
+  because the exporter connects to `qemu:///system`)
 - Access to QEMU PID files (`/var/run/libvirt/qemu`)
 - Host PID namespace access (`--pid=host`)
+- The container runs as root: reading `/proc/<pid>/task/*/comm` of the QEMU
+  processes and opening the libvirt socket both require it
 
 ### System Dependencies
 

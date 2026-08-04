@@ -6,10 +6,18 @@ Wants=network-online.target
 [Container]
 Image=docker.io/insatomcat/insatomcat-exporter:latest
 PublishPort=9184:9184
-Volume=/var/run/libvirt/libvirt-sock-ro:/var/run/libvirt/libvirt-sock-ro:ro
+# The exporter connects to qemu:///system, which needs the read-write socket.
+Volume=/var/run/libvirt/libvirt-sock:/var/run/libvirt/libvirt-sock:ro
 Volume=/var/run/libvirt/qemu:/var/run/libvirt/qemu:ro
 PodmanArgs=--pid=host
 SecurityLabelDisable=true
+
+# Serve metrics over TLS, and require a client certificate signed by the given
+# CA. Drop the three lines to keep plain HTTP.
+#Volume=/etc/prometheus/exporters/tls:/etc/prometheus/exporters/tls:ro
+#Environment=TLS_CERT_FILE=/etc/prometheus/exporters/tls/server.crt
+#Environment=TLS_KEY_FILE=/etc/prometheus/exporters/tls/server.key
+#Environment=TLS_CLIENT_CA_FILE=/etc/prometheus/exporters/tls/ca.crt
 
 [Service]
 Restart=always

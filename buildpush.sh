@@ -15,10 +15,9 @@ echo "Testing the image locally..."
 podman run -d \
   --name insatomcat-exporter-test \
   -p 9184:9184 \
-  -v /var/run/libvirt/libvirt-sock-ro:/var/run/libvirt/libvirt-sock-ro:ro \
+  -v /var/run/libvirt/libvirt-sock:/var/run/libvirt/libvirt-sock:ro \
   -v /var/run/libvirt/qemu:/var/run/libvirt/qemu:ro \
-  -v /proc:/host/proc:ro \
-  --privileged \
+  --pid=host \
   ${DOCKER_USERNAME}/${IMAGE_NAME}:${VERSION}
 
 echo "Waiting for exporter to start..."
