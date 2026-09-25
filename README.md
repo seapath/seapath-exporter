@@ -1,7 +1,6 @@
 # seapath-exporter
 
-[![Docker Hub](https://img.shields.io/docker/v/seapath/seapath-exporter?sort=semver)](https://hub.docker.com/r/seapath/seapath-exporter)
-[![Docker Pulls](https://img.shields.io/docker/pulls/seapath/seapath-exporter)](https://hub.docker.com/r/seapath/seapath-exporter)
+[![Container image](https://github.com/seapath/seapath-exporter/actions/workflows/image.yml/badge.svg)](https://github.com/seapath/seapath-exporter/pkgs/container/seapath-exporter)
 
 A comprehensive Prometheus exporter for monitoring various infrastructure components that lack proper metrics exposure in existing exporters. It is part of the [SEAPATH](https://github.com/seapath) project.
 
@@ -50,10 +49,12 @@ This list is actively developed based on real production monitoring needs.
 
 ## 📦 Installation
 
-### Docker Hub
+### Container Image
+
+The image is published on the GitHub Container Registry:
 
 ```bash
-docker pull seapath/seapath-exporter:latest
+podman pull ghcr.io/seapath/seapath-exporter:latest
 ```
 
 ### Quick Start with Podman
@@ -66,7 +67,7 @@ podman run -d \
   -v /var/run/libvirt/libvirt-sock:/var/run/libvirt/libvirt-sock:ro \
   -v /var/run/libvirt/qemu:/var/run/libvirt/qemu:ro \
   --pid=host \
-  docker.io/seapath/seapath-exporter:latest
+  ghcr.io/seapath/seapath-exporter:latest
 ```
 
 ### Quick Start with Docker
@@ -79,7 +80,7 @@ docker run -d \
   -v /var/run/libvirt/libvirt-sock:/var/run/libvirt/libvirt-sock:ro \
   -v /var/run/libvirt/qemu:/var/run/libvirt/qemu:ro \
   --pid=host \
-  seapath/seapath-exporter:latest
+  ghcr.io/seapath/seapath-exporter:latest
 ```
 
 ### Systemd with Podman Quadlet (Recommended)
@@ -93,7 +94,7 @@ After=network-online.target libvirtd.service
 Wants=network-online.target
 
 [Container]
-Image=docker.io/seapath/seapath-exporter:latest
+Image=ghcr.io/seapath/seapath-exporter:latest
 PublishPort=9184:9184
 Volume=/var/run/libvirt/libvirt-sock:/var/run/libvirt/libvirt-sock:ro
 Volume=/var/run/libvirt/qemu:/var/run/libvirt/qemu:ro
@@ -122,7 +123,7 @@ version: '3.8'
 
 services:
   seapath-exporter:
-    image: seapath/seapath-exporter:latest
+    image: ghcr.io/seapath/seapath-exporter:latest
     container_name: seapath-exporter
     restart: unless-stopped
     ports:
@@ -181,7 +182,7 @@ podman run -d \
   -e TLS_KEY_FILE=/etc/prometheus/exporters/tls/server.key \
   -e TLS_CLIENT_CA_FILE=/etc/prometheus/exporters/tls/ca.crt \
   --pid=host \
-  docker.io/seapath/seapath-exporter:latest
+  ghcr.io/seapath/seapath-exporter:latest
 ```
 
 The matching scrape configuration:
@@ -246,10 +247,10 @@ git clone https://github.com/seapath/seapath-exporter.git
 cd seapath-exporter
 
 # Build with Podman
-podman build -t seapath/seapath-exporter:latest .
+podman build -t seapath-exporter:latest .
 
 # Or with Docker
-docker build -t seapath/seapath-exporter:latest .
+docker build -t seapath-exporter:latest .
 ```
 
 ### Run Locally (without container)
@@ -261,6 +262,19 @@ pip install -r requirements.txt
 # Run the exporter
 python seapath_exporter.py
 ```
+
+`./buildtest.sh` builds the image and checks that the metrics endpoint answers.
+
+### Releasing
+
+Pushing a version tag publishes the image through the `Container image` workflow:
+
+```bash
+git tag -s v0.1.0 -m v0.1.0
+git push origin v0.1.0
+```
+
+The tag `v0.1.0` yields the image tags `0.1.0`, `0.1` and `latest` on `ghcr.io/seapath/seapath-exporter`. Pull requests build the image without publishing it.
 
 ## 📋 Requirements
 
@@ -347,7 +361,7 @@ Apache License 2.0, see [LICENSE](LICENSE).
 
 ## 🔗 Links
 
-- [Docker Hub](https://hub.docker.com/r/seapath/seapath-exporter)
+- [Container image](https://github.com/seapath/seapath-exporter/pkgs/container/seapath-exporter)
 - [Report Issues](https://github.com/seapath/seapath-exporter/issues)
 
 ## 📞 Support

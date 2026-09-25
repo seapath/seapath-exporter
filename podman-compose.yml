@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   seapath-exporter:
-    image: docker.io/seapath/seapath-exporter:latest
+    image: ghcr.io/seapath/seapath-exporter:latest
     container_name: seapath-exporter
     restart: unless-stopped
     ports:

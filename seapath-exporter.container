@@ -4,7 +4,7 @@ After=network-online.target libvirtd.service
 Wants=network-online.target
 
 [Container]
-Image=docker.io/seapath/seapath-exporter:latest
+Image=ghcr.io/seapath/seapath-exporter:latest
 PublishPort=9184:9184
 # The exporter connects to qemu:///system, which needs the read-write socket.
 Volume=/var/run/libvirt/libvirt-sock:/var/run/libvirt/libvirt-sock:ro
