@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: Apache-2.0
 """Prometheus exporter for the metrics missing from the standard exporters."""
 
 import logging
@@ -12,7 +12,7 @@ import psutil
 from prometheus_client import REGISTRY, start_http_server
 from prometheus_client.core import GaugeMetricFamily
 
-LOG = logging.getLogger("insatomcat_exporter")
+LOG = logging.getLogger("seapath_exporter")
 
 DEFAULT_LIBVIRT_URI = "qemu:///system"
 DEFAULT_QEMU_PID_DIR = "/var/run/libvirt/qemu"

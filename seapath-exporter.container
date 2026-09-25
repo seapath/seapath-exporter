@@ -1,10 +1,10 @@
 [Unit]
-Description=Prometheus insatomcat Exporter (vhost CPU monitoring)
+Description=Prometheus SEAPATH Exporter (vhost CPU monitoring)
 After=network-online.target libvirtd.service
 Wants=network-online.target
 
 [Container]
-Image=docker.io/insatomcat/insatomcat-exporter:latest
+Image=docker.io/seapath/seapath-exporter:latest
 PublishPort=9184:9184
 # The exporter connects to qemu:///system, which needs the read-write socket.
 Volume=/var/run/libvirt/libvirt-sock:/var/run/libvirt/libvirt-sock:ro

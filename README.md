@@ -1,9 +1,9 @@
-# insatomcat-exporter
+# seapath-exporter
 
-[![Docker Hub](https://img.shields.io/docker/v/insatomcat/insatomcat-exporter?sort=semver)](https://hub.docker.com/r/insatomcat/insatomcat-exporter)
-[![Docker Pulls](https://img.shields.io/docker/pulls/insatomcat/insatomcat-exporter)](https://hub.docker.com/r/insatomcat/insatomcat-exporter)
+[![Docker Hub](https://img.shields.io/docker/v/seapath/seapath-exporter?sort=semver)](https://hub.docker.com/r/seapath/seapath-exporter)
+[![Docker Pulls](https://img.shields.io/docker/pulls/seapath/seapath-exporter)](https://hub.docker.com/r/seapath/seapath-exporter)
 
-A comprehensive Prometheus exporter for monitoring various infrastructure components that lack proper metrics exposure in existing exporters.
+A comprehensive Prometheus exporter for monitoring various infrastructure components that lack proper metrics exposure in existing exporters. It is part of the [SEAPATH](https://github.com/seapath) project.
 
 ## 🎯 Purpose
 
@@ -53,47 +53,47 @@ This list is actively developed based on real production monitoring needs.
 ### Docker Hub
 
 ```bash
-docker pull insatomcat/insatomcat-exporter:latest
+docker pull seapath/seapath-exporter:latest
 ```
 
 ### Quick Start with Podman
 
 ```bash
 podman run -d \
-  --name insatomcat-exporter \
+  --name seapath-exporter \
   --restart unless-stopped \
   -p 9184:9184 \
   -v /var/run/libvirt/libvirt-sock:/var/run/libvirt/libvirt-sock:ro \
   -v /var/run/libvirt/qemu:/var/run/libvirt/qemu:ro \
   --pid=host \
-  docker.io/insatomcat/insatomcat-exporter:latest
+  docker.io/seapath/seapath-exporter:latest
 ```
 
 ### Quick Start with Docker
 
 ```bash
 docker run -d \
-  --name insatomcat-exporter \
+  --name seapath-exporter \
   --restart unless-stopped \
   -p 9184:9184 \
   -v /var/run/libvirt/libvirt-sock:/var/run/libvirt/libvirt-sock:ro \
   -v /var/run/libvirt/qemu:/var/run/libvirt/qemu:ro \
   --pid=host \
-  insatomcat/insatomcat-exporter:latest
+  seapath/seapath-exporter:latest
 ```
 
 ### Systemd with Podman Quadlet (Recommended)
 
-Create `/etc/containers/systemd/insatomcat-exporter.container`:
+Create `/etc/containers/systemd/seapath-exporter.container`:
 
 ```ini
 [Unit]
-Description=Prometheus insatomcat Exporter
+Description=Prometheus SEAPATH Exporter
 After=network-online.target libvirtd.service
 Wants=network-online.target
 
 [Container]
-Image=docker.io/insatomcat/insatomcat-exporter:latest
+Image=docker.io/seapath/seapath-exporter:latest
 PublishPort=9184:9184
 Volume=/var/run/libvirt/libvirt-sock:/var/run/libvirt/libvirt-sock:ro
 Volume=/var/run/libvirt/qemu:/var/run/libvirt/qemu:ro
@@ -112,7 +112,7 @@ Enable and start:
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable --now insatomcat-exporter.service
+sudo systemctl enable --now seapath-exporter.service
 ```
 
 ### docker-compose
@@ -121,9 +121,9 @@ sudo systemctl enable --now insatomcat-exporter.service
 version: '3.8'
 
 services:
-  insatomcat-exporter:
-    image: insatomcat/insatomcat-exporter:latest
-    container_name: insatomcat-exporter
+  seapath-exporter:
+    image: seapath/seapath-exporter:latest
+    container_name: seapath-exporter
     restart: unless-stopped
     ports:
       - "9184:9184"
@@ -141,7 +141,7 @@ Add to your `prometheus.yml`:
 
 ```yaml
 scrape_configs:
-  - job_name: 'insatomcat-exporter'
+  - job_name: 'seapath-exporter'
     static_configs:
       - targets: ['localhost:9184']
     scrape_interval: 30s
@@ -172,7 +172,7 @@ any shared secret to distribute:
 
 ```bash
 podman run -d \
-  --name insatomcat-exporter \
+  --name seapath-exporter \
   -p 9184:9184 \
   -v /var/run/libvirt/libvirt-sock:/var/run/libvirt/libvirt-sock:ro \
   -v /var/run/libvirt/qemu:/var/run/libvirt/qemu:ro \
@@ -181,14 +181,14 @@ podman run -d \
   -e TLS_KEY_FILE=/etc/prometheus/exporters/tls/server.key \
   -e TLS_CLIENT_CA_FILE=/etc/prometheus/exporters/tls/ca.crt \
   --pid=host \
-  docker.io/insatomcat/insatomcat-exporter:latest
+  docker.io/seapath/seapath-exporter:latest
 ```
 
 The matching scrape configuration:
 
 ```yaml
 scrape_configs:
-  - job_name: 'insatomcat-exporter'
+  - job_name: 'seapath-exporter'
     scheme: https
     tls_config:
       ca_file: /etc/prometheus/tls/ca.crt
@@ -242,14 +242,14 @@ curl --cacert ca.crt --cert prometheus.crt --key prometheus.key \
 
 ```bash
 # Clone the repository
-git clone https://github.com/insatomcat/insatomcat-exporter.git
-cd insatomcat-exporter
+git clone https://github.com/seapath/seapath-exporter.git
+cd seapath-exporter
 
 # Build with Podman
-podman build -t insatomcat/insatomcat-exporter:latest .
+podman build -t seapath/seapath-exporter:latest .
 
 # Or with Docker
-docker build -t insatomcat/insatomcat-exporter:latest .
+docker build -t seapath/seapath-exporter:latest .
 ```
 
 ### Run Locally (without container)
@@ -259,7 +259,7 @@ docker build -t insatomcat/insatomcat-exporter:latest .
 pip install -r requirements.txt
 
 # Run the exporter
-python insatomcat_exporter.py
+python seapath_exporter.py
 ```
 
 ## 📋 Requirements
@@ -293,15 +293,15 @@ python insatomcat_exporter.py
 2. Check exporter logs:
    ```bash
    # Podman
-   podman logs insatomcat-exporter
+   podman logs seapath-exporter
    
    # Systemd
-   sudo journalctl -u insatomcat-exporter.service -f
+   sudo journalctl -u seapath-exporter.service -f
    ```
 
 3. Verify the container can access libvirt:
    ```bash
-   podman exec insatomcat-exporter python3 -c "import libvirt; print(libvirt.open('qemu:///system').listDomainsID())"
+   podman exec seapath-exporter python3 -c "import libvirt; print(libvirt.open('qemu:///system').listDomainsID())"
    ```
 
 ### Permission denied errors
@@ -339,15 +339,16 @@ Contributions are welcome! If you need a specific metric that's missing from sta
 - Add metrics that complement (not duplicate) existing exporters
 - Include clear documentation and examples
 - Test in a real environment before submitting
+- Sign off every commit (`git commit -s`), as required by the SEAPATH [Developer Certificate of Origin](https://github.com/seapath/.github/blob/main/CONTRIBUTING.md#license-and-developer-certificate-of-origin) policy
 
 ## 📜 License
 
-GPL v3
+Apache License 2.0, see [LICENSE](LICENSE).
 
 ## 🔗 Links
 
-- [Docker Hub](https://hub.docker.com/r/insatomcat/insatomcat-exporter)
-- [Report Issues](https://github.com/insatomcat/insatomcat-exporter/issues)
+- [Docker Hub](https://hub.docker.com/r/seapath/seapath-exporter)
+- [Report Issues](https://github.com/seapath/seapath-exporter/issues)
 
 ## 📞 Support
 

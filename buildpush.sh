@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Step 1: Build the Podman image
-DOCKER_USERNAME="insatomcat"
-IMAGE_NAME="insatomcat-exporter"
+DOCKER_USERNAME="seapath"
+IMAGE_NAME="seapath-exporter"
 VERSION="0.0.1"
 
 echo "Building Podman image..."
@@ -13,7 +13,7 @@ podman tag ${DOCKER_USERNAME}/${IMAGE_NAME}:${VERSION} ${DOCKER_USERNAME}/${IMAG
 echo "Testing the image locally..."
 # Note: Podman runs rootless by default, adjust volumes as needed
 podman run -d \
-  --name insatomcat-exporter-test \
+  --name seapath-exporter-test \
   -p 9184:9184 \
   -v /var/run/libvirt/libvirt-sock:/var/run/libvirt/libvirt-sock:ro \
   -v /var/run/libvirt/qemu:/var/run/libvirt/qemu:ro \
@@ -27,8 +27,8 @@ echo "Testing metrics endpoint..."
 curl http://localhost:9184/metrics
 
 echo "Stopping test container..."
-podman stop insatomcat-exporter-test
-podman rm insatomcat-exporter-test
+podman stop seapath-exporter-test
+podman rm seapath-exporter-test
 
 # Step 3: Login to Docker Hub
 echo "Logging in to Docker Hub..."

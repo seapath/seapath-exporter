@@ -29,10 +29,10 @@ COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:${PATH}"
 
 WORKDIR /app
-COPY insatomcat_exporter.py .
+COPY seapath_exporter.py .
 
 EXPOSE 9184
 
 # Exec form so that the exporter runs as PID 1 and gets the SIGTERM sent by
 # podman stop, instead of being killed after the stop timeout.
-CMD ["python", "/app/insatomcat_exporter.py"]
+CMD ["python", "/app/seapath_exporter.py"]

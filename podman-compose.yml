@@ -1,9 +1,9 @@
 version: '3.8'
 
 services:
-  insatomcat-exporter:
-    image: docker.io/insatomcat/insatomcat-exporter:latest
-    container_name: insatomcat-exporter
+  seapath-exporter:
+    image: docker.io/seapath/seapath-exporter:latest
+    container_name: seapath-exporter
     restart: unless-stopped
     ports:
       - "9184:9184"
